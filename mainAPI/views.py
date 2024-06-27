@@ -5,9 +5,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 
-from mainAPI.models import MenuItem, Cart
-from mainAPI.serializers import MenuItemsSerializer, GroupSerializer, UserSerializer, CartSerializer
+from mainAPI.models import MenuItem, Cart, Category
+from mainAPI.serializers import MenuItemsSerializer, UserSerializer, CartSerializer
 
 
 # Create your views here.
@@ -15,6 +16,24 @@ from mainAPI.serializers import MenuItemsSerializer, GroupSerializer, UserSerial
 class MenuItemView(ListCreateAPIView):
     queryset = MenuItem.objects.all()
     serializer_class = MenuItemsSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = MenuItemsSerializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+            obj = MenuItem()
+            obj.price = serializer.validated_data['price']
+            obj.category = serializer.validated_data['category']
+            obj.featured = serializer.validated_data['featured']
+            obj.title = serializer.validated_data['title']
+            obj.save()
+            serialized_obj = MenuItemsSerializer(obj)
+            return Response(serialized_obj.data, status=status.HTTP_201_CREATED)
+        except ValidationError as v_e:
+            if v_e.args[0].get("category")[0].code == "does_not_exist":
+                return Response({"error": "Category does not exist"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                raise v_e
 
     def get_permissions(self):
         if self.request.method == 'GET':
@@ -63,13 +82,9 @@ def single_user(request, group, user_id):
                 return Response(user, status=status.HTTP_201_CREATED)
 
 
-
 class UserView(ListCreateAPIView):
     queryset = User.objects.filter()
     serializer_class = UserSerializer
-
-
-
 
 
 @api_view(["GET", "POST", "DELETE"])
@@ -95,4 +110,3 @@ def cart_menu_item(request):
         objs = Cart.objects.all().delete()
         objs.save()
         return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
-

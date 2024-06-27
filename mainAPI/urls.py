@@ -8,7 +8,7 @@ urlpatterns = [
     path('', include('djoser.urls.authtoken')),
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh', TokenRefreshView.as_view(), name='token_refresh'),
-    path('menu-items/', MenuItemView.as_view(), name='menu_item'),
+    path('menu-items', MenuItemView.as_view(), name='menu_item'),
     path('menu-items/<int:pk>', SingleMenuItemView.as_view(), name='menu_item'),
     path('groups/<str:group>/users/', user_groups, name='group'),
     path('groups/<str:group>/users/<int:user_id>', single_user, name='group'),
