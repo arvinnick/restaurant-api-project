@@ -92,7 +92,7 @@ class UserView(ListCreateAPIView):
 def cart_menu_item(request):
     serializer = CartSerializer(data=request.data, many=True)
     if request.method == "GET":
-        queryset = Cart.objects.all()
+        queryset = Cart.objects.all().filter(user=request.user)
         serialized_cart = CartSerializer(queryset, many=True)
         return Response(serialized_cart.data, status=status.HTTP_200_OK)
     elif request.method == "POST":

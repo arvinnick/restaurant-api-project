@@ -5,8 +5,11 @@ from django.db import models
 # Create your models here.
 
 class Category(models.Model):
+    id = models.IntegerField(primary_key=True)
     slug = models.SlugField()
     title = models.CharField(max_length=255, db_index=True)
+    def __str__(self):
+        return self.title
 
 
 class MenuItem(models.Model):

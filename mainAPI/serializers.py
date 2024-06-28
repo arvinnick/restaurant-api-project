@@ -8,7 +8,7 @@ from mainAPI.models import MenuItem, Cart, Order
 class MenuItemsSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
-        fields = ['id', 'title', 'price', 'category']
+        fields = ['id', 'title','featured' , 'price', 'category']
 
 
 class CartSerializer(serializers.ModelSerializer):
