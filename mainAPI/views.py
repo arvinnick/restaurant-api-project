@@ -63,7 +63,7 @@ def user_groups(request, group):
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
-def single_user(request, group, user_id):
+def single_user(request, user_id, group=None):
     serialized_user = UserSerializer(user_id)
     if serialized_user.is_valid():
         if request.method == "GET":
@@ -77,7 +77,7 @@ def single_user(request, group, user_id):
                 user = User.objects.create_user(serialized_user.data.get("username"),
                                                 serialized_user.data.get("email"),
                                                 serialized_user.data.get("password"),
-                                                group=group)
+                                                group=serialized_user.data.get("group") if group else "customer")
                 user.save()
                 return Response(user, status=status.HTTP_201_CREATED)
 
@@ -85,6 +85,18 @@ def single_user(request, group, user_id):
 class UserView(ListCreateAPIView):
     queryset = User.objects.filter()
     serializer_class = UserSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+            if serializer.data.get("group") is None:
+                serializer.data["group"] = "costumer"
+                user_obj = User(**serializer.data)
+                user_obj.save()
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValidationError as v_e:
+            raise v_e
 
 
 @api_view(["GET", "POST", "DELETE"])
@@ -102,11 +114,12 @@ def cart_menu_item(request):
             obj = serializer.create(v_data)
             obj.unit_price = menu_query.get("price")
             obj.price = obj.unit_price * obj.quantity
+            obj.user = request.user
             obj.save()
             return Response(obj.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     elif request.method == "DELETE":
-        objs = Cart.objects.all().delete()
+        objs = Cart.objects.all().filter(user=request.user).delete()
         objs.save()
         return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
