@@ -46,3 +46,5 @@ class OrderItem(models.Model):
     class Meta:
         unique_together = ('order', 'menuItem')
 
+# class CostumeUser(User):
+#     pass
