@@ -152,32 +152,36 @@ def user_view_me(request):
 @api_view(["GET", "POST", "DELETE"])
 @permission_classes([IsAuthenticated])
 def cart_menu_item(request):
+    queryset = Cart.objects.all().filter(user=request.user).all()
     if request.method == "GET":
-        queryset = Cart.objects.all().filter(user=request.user).get()
-        serialized_cart = CartSerializer(queryset)
+        serialized_cart = CartSerializer(queryset, many=True)
         return Response(serialized_cart.data, status=status.HTTP_200_OK)
     elif request.method == "POST":
-        serialized_menu_items = MenuItemsSerializer(data=request.data)
-        menu_item = MenuItem.objects.filter(id=eval(request.data.get('id')))
-        user = User.objects.get(username=request.user.username)
-        if Cart.objects.filter(user=user).exists():
-            cart = Cart.objects.get(user=user)
-        else:
-            cart = Cart.objects.create(user=request.user.username)
-        if cart.menuitem.id == menu_item.get().id:
-            cart.quantity += eval(request.data.get('quantity'))
-        else:
-            cart.menuitem = menu_item.get()
-            cart.quantity = eval(request.data.get('quantity'))
-        cart.unit_price = menu_item.get().price
-        cart.price = cart.quantity * cart.unit_price
-        cart.save()
-        serialized_cart = CartSerializer(cart)
-        return Response(serialized_cart.data, status=status.HTTP_201_CREATED)
+        menu_item = MenuItem.objects.filter(title=request.data.get('title')).get()
+        quantity = eval(request.data.get('quantity'))
+        try:
+            cart_item = Cart()
+            cart_item.user = request.user
+            cart_item.menuitem = menu_item
+            cart_item.unit_price = cart_item.menuitem.price
+            cart_item.quantity = quantity
+            cart_item.price = cart_item.unit_price * cart_item.quantity
+            cart_item.save()
+        except IntegrityError as ie:
+            if Cart.objects.filter(menuitem=menu_item).exists():
+                cart_item = Cart.objects.filter(menuitem=menu_item).get()
+                cart_item.quantity += quantity
+                cart_item.price = cart_item.unit_price * cart_item.quantity
+                cart_item.save()
+            else:
+                raise ie
+        return Response(status=status.HTTP_201_CREATED)
     elif request.method == "DELETE":
         objs = Cart.objects.all().filter(user=request.user).delete()
         # objs.save()
         return Response(status=status.HTTP_202_ACCEPTED)
+    else:
+        pass
 
 
 class OrderView(ListCreateAPIView):
