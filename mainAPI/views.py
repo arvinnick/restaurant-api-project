@@ -59,7 +59,7 @@ class SingleMenuItemView(RetrieveUpdateDestroyAPIView):
             return [IsAuthenticated()]
 
 
-@api_view(["GET", "POST", "DELETE"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def user_groups(request, group):
     if group == 'delivery-crew':
@@ -90,40 +90,30 @@ def user_groups(request, group):
                     return Response(status=status.HTTP_201_CREATED)
                 else:
                     raise e
-        elif request.method == "DELETE":
-            user_set.create(username=request.data.get('username'),
-                            is_staff=True,
-                            is_active=True,
-                            password=request.data.get('password'),
-                            email=request.data.get('email'))
-            user_set.save()
-            # serialized_users = UserSerializer(user_set, many=True)
-            return Response(status=status.HTTP_201_CREATED)
     else:
         return Response({"message": "user not authorized"}, status=status.HTTP_401_UNAUTHORIZED)
     # else:
     #     return Response(serialized_users.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["GET", "POST"])
+@api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def single_user(request, user_id, group=None):
-    serialized_user = UserSerializer(user_id)
-    if serialized_user.is_valid():
-        if request.method == "GET":
-            user = User.objects.get()
-            serialized_users = UserSerializer(user)
-            return Response(serialized_users.data, status=status.HTTP_200_OK)
-        elif request.method == "POST":
-            if User.objects.exists(user_id):
-                return Response(status=status.HTTP_409_CONFLICT, headers={"message": "User already exists"})
-            else:
-                user = User.objects.create_user(serialized_user.data.get(),
-                                                serialized_user.data.get(),
-                                                serialized_user.data.get(),
-                                                group=serialized_user.data.get() if group else "customer")
-                user.save()
-                return Response(user, status=status.HTTP_201_CREATED)
+    if group == 'delivery-crew':
+        group = "delivery crew"
+    try:
+        users = Group.objects.get(name=group)
+        user_set = users.user_set
+    except Group.DoesNotExist:
+        return Response("check the URL", status=status.HTTP_400_BAD_REQUEST)
+    if request.user.groups.filter(name='manager').exists():
+        if User.objects.filter(id=user_id).exists():
+            user_set.remove(user_id)
+            return Response(status=status.HTTP_200_OK, headers={"message": "User already exists"})
+        else:
+            return Response("user not found", status=status.HTTP_404_NOT_FOUND)
+    else:
+        return Response(status=status.HTTP_403_FORBIDDEN)
 
 
 @api_view(["POST", "GET"])
