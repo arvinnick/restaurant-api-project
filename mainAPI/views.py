@@ -19,7 +19,7 @@ from mainAPI.serializers import MenuItemsSerializer, UserSerializer, CartSeriali
 
 @api_view(["GET", "POST", "PUT", "DELETE", "PATCH"])
 @permission_classes([IsAuthenticated])
-def menu_items_view(request):
+def menuitems(request):
     if request.method == "POST":
         if request.user.groups.filter(name='manager').exists():
             serializer = MenuItemsSerializer(data=request.data)
@@ -38,7 +38,7 @@ def menu_items_view(request):
         else:
             return Response({"user not authorized"}, status=status.HTTP_403_FORBIDDEN)
     elif request.method == "GET":
-        obj = MenuItem.objects.all()
+        obj = MenuItem.objects.select_related('category').all()
         serialized_obj = MenuItemsSerializer(obj, many=True)
         return Response(serialized_obj.data, status=status.HTTP_200_OK)
     else:
@@ -152,27 +152,32 @@ def user_view_me(request):
 @api_view(["GET", "POST", "DELETE"])
 @permission_classes([IsAuthenticated])
 def cart_menu_item(request):
-    serializer = CartSerializer(data=request.data, many=True)
     if request.method == "GET":
-        queryset = Cart.objects.all().filter(user=request.user)
-        serialized_cart = CartSerializer(queryset, many=True)
+        queryset = Cart.objects.all().filter(user=request.user).get()
+        serialized_cart = CartSerializer(queryset)
         return Response(serialized_cart.data, status=status.HTTP_200_OK)
     elif request.method == "POST":
-        if serializer.is_valid():
-            menu_query = MenuItem.objects.filter(title=serializer.data.get())
-            v_data = serializer.validated_data
-            obj = serializer.create(v_data)
-            obj.unit_price = menu_query.get()
-            obj.price = obj.unit_price * obj.quantity
-            obj.user = request.user
-            obj.save()
-            return Response(obj.data, status=status.HTTP_201_CREATED)
+        serialized_menu_items = MenuItemsSerializer(data=request.data)
+        menu_item = MenuItem.objects.filter(id=eval(request.data.get('id')))
+        user = User.objects.get(username=request.user.username)
+        if Cart.objects.filter(user=user).exists():
+            cart = Cart.objects.get(user=user)
         else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            cart = Cart.objects.create(user=request.user.username)
+        if cart.menuitem.id == menu_item.get().id:
+            cart.quantity += eval(request.data.get('quantity'))
+        else:
+            cart.menuitem = menu_item.get()
+            cart.quantity = eval(request.data.get('quantity'))
+        cart.unit_price = menu_item.get().price
+        cart.price = cart.quantity * cart.unit_price
+        cart.save()
+        serialized_cart = CartSerializer(cart)
+        return Response(serialized_cart.data, status=status.HTTP_201_CREATED)
     elif request.method == "DELETE":
         objs = Cart.objects.all().filter(user=request.user).delete()
-        objs.save()
-        return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
+        # objs.save()
+        return Response(status=status.HTTP_202_ACCEPTED)
 
 
 class OrderView(ListCreateAPIView):
