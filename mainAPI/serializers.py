@@ -12,24 +12,17 @@ class MenuItemsSerializer(serializers.ModelSerializer):
         fields = ['title', 'featured', 'price', 'category']
 
 
-class CartItemsSerializer(serializers.ModelSerializer):
-    quantity = serializers.IntegerField()
-    unit_price = serializers.DecimalField(decimal_places=2, max_digits=2)
-    menuitem = MenuItemsSerializer()
 
 
 class CartSerializer(serializers.ModelSerializer):
-    items = CartItemsSerializer(many=True, read_only=True)
-    price = serializers.SerializerMethodField(method_name="calculate_total_price")
+    menuitem = serializers.StringRelatedField(read_only=True)
+    price = serializers.SerializerMethodField(method_name="total_price")
     class Meta:
         model = Cart
-        fields = ['items', 'price']
-        depth = 1
+        fields = ["quantity", "unit_price", "price", "menuitem"]
 
-    def calculate_total_price(self, cart):
-        total_price = 0
-        total_price += cart.price * cart.quantity
-        return total_price
+    def total_price(self, obj):
+        return obj.quantity * obj.unit_price
 
 class OrderSerializer(serializers.ModelSerializer):
     class Meta:
