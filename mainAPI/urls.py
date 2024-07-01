@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from mainAPI.views import SingleMenuItemView, user_groups, single_user, cart_menu_item, \
-    OrderView, user_view_me, menuitems
+    OrderView, user_view_me, menuitems, single_order_view
 
 urlpatterns = [
     path('/menu-items', menuitems, name='menuitem-detail'),
@@ -12,4 +12,5 @@ urlpatterns = [
     path('/users', user_view_me, name='users'),
     path('/cart/menu-items', cart_menu_item, name="cart"),
     path('/orders', OrderView.as_view(), name='orders'),
+    path('/orders/<int:pk>', single_order_view, name='single_order'),
 ]

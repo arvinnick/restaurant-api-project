@@ -9,16 +9,16 @@ from mainAPI.models import MenuItem, Cart, Order, Category, OrderItem
 
 class MenuItemsSerializer(serializers.ModelSerializer):
     category = serializers.StringRelatedField(read_only=True)
+
     class Meta:
         model = MenuItem
         fields = ['title', 'featured', 'price', 'category']
 
 
-
-
 class CartSerializer(serializers.ModelSerializer):
     menuitem = serializers.StringRelatedField(read_only=True)
     price = serializers.SerializerMethodField(method_name="total_price")
+
     class Meta:
         model = Cart
         fields = ["quantity", "unit_price", "price", "menuitem"]
@@ -26,12 +26,15 @@ class CartSerializer(serializers.ModelSerializer):
     def total_price(self, obj):
         return obj.quantity * obj.unit_price
 
+
 class OrderSerializer(serializers.ModelSerializer):
     total = serializers.SerializerMethodField(method_name="get_total", default=0)
     date = serializers.DateField(format="%Y-%m-%d", default=str(datetime.today().date()))
+
     class Meta:
         model = Order
         fields = ["total", "date", "status", "delivery_crew"]
+
     def get_total(self, order):
         if order.exists():
             queryset = OrderItem.objects.filter(order=order.get())
@@ -44,16 +47,16 @@ class OrderSerializer(serializers.ModelSerializer):
             return 0
 
 
-
 class OrderItemSerializer(serializers.ModelSerializer):
-    order = serializers.StringRelatedField(read_only=True)
     price = serializers.SerializerMethodField(method_name="total_price")
+
     class Meta:
         model = OrderItem
-        fields = "__all__"
+        fields = ["quantity", "unit_price", "menuItem", "price"]
 
     def total_price(self, obj):
         return obj.quantity * obj.unit_price
+
 
 class GroupSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1,4 +1,5 @@
-import datetime
+from datetime import datetime
+
 
 from django.contrib.auth.models import Group, User
 from django.db import IntegrityError
@@ -226,3 +227,44 @@ class OrderView(ListCreateAPIView):
             order.save()
             return Response(status=status.HTTP_201_CREATED)
 
+
+
+@api_view(["GET", "DELETE", "PATCH", "PUT"])
+@permission_classes([IsAuthenticated])
+def single_order_view(request, pk):
+    user = request.user
+    user_group = User.objects.get(id=user.id).groups.get()
+    order = Order.objects.filter(id=pk)
+    if not order.exists():
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    if request.method == "GET":
+        if user_group.name == "customer":
+            order = order.get()
+            if order.user == user:
+                items = OrderItem.objects.filter(order=order).all()
+                serialized_items = OrderItemSerializer(items, many=True)
+                return Response(serialized_items.data, status=status.HTTP_200_OK)
+            else:
+                return Response(status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            return Response("user should be costumer", status=status.HTTP_403_FORBIDDEN)
+    elif request.method == "DELETE":
+        if user_group.name == "manager":
+            order.delete()
+            return Response(status=status.HTTP_202_ACCEPTED)
+    elif request.method == "PUT":
+        if user_group.name == "costumer":
+            data = OrderItemSerializer(request.data)
+            OrderItem.objects.create(order=order, quantity=data['quantity'],
+                                     menuItem=MenuItem.objects.get(title=data['menuitem']),
+                                     unit_price=data['unit_price'], price=data['price'])
+            return Response(status=status.HTTP_201_CREATED)
+        else:
+            return Response("user not authorized", status=status.HTTP_401_UNAUTHORIZED)
+
+    elif request.method == "PATCH":
+        if user_group.name == "costumer":
+            data = OrderItemSerializer(request.data)
+            order.update(data=data.data.items())
+    else:
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
