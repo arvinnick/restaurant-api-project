@@ -1,3 +1,5 @@
+import datetime
+
 from django.contrib.auth.models import Group, User
 from django.db import IntegrityError
 from django.http import Http404
@@ -11,7 +13,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
 
 from mainAPI.models import MenuItem, Cart, Category, Order, OrderItem
-from mainAPI.serializers import MenuItemsSerializer, UserSerializer, CartSerializer, OrderSerializer
+from mainAPI.serializers import MenuItemsSerializer, UserSerializer, CartSerializer, OrderSerializer, \
+    OrderItemSerializer
 
 
 # Create your views here.
@@ -181,13 +184,14 @@ def cart_menu_item(request):
         # objs.save()
         return Response(status=status.HTTP_202_ACCEPTED)
     else:
-        pass
-
+        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 class OrderView(ListCreateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
+    def get_permissions(self):
+        return [IsAuthenticated()]
     def get(self, request, **kwargs):
         if "customer" in list(self.request.user.groups.values_list("name", flat=True)):
             data = self.queryset.filter(user=self.request.user)
@@ -198,14 +202,27 @@ class OrderView(ListCreateAPIView):
         else:
             return Response({"message": "you should login to access orders"},
                             status=status.HTTP_401_UNAUTHORIZED)
+        if data.exists():
+            serialized_data = self.serializer_class(data)
+            return Response(serialized_data.data, status=status.HTTP_200_OK)
+        else:
+            return Response("no order", status=status.HTTP_404_NOT_FOUND)
 
-        serialized_data = self.serializer_class(data)
-        return Response(serialized_data.data, status=status.HTTP_200_OK)
 
     def post(self, request, *args, **kwargs):
-        if self.request.user.groups == "customer":
-            queryset = Cart.objects.filter(user=self.request.user)
-            serializer = CartSerializer(queryset, many=True)
-            order_data = Order()
-            for key, value in serializer.data.items:
-                pass
+        user = User.objects.get(id=request.user.id)
+        group = user.groups.get()
+        if group.name == "customer":
+            cart = Cart.objects.filter(user=user)
+            cart_serializer = CartSerializer(cart, many=True)
+            order = Order.objects.filter(user=user)
+            if not order.exists():
+                order = Order.objects.create(user=user, date=str(datetime.today().date()), total=0)
+            for data in cart_serializer.data:
+                OrderItem.objects.create(order=order, quantity=data['quantity'],
+                                         menuItem=MenuItem.objects.get(title=data['menuitem']),
+                                         unit_price=data['unit_price'], price=data['price'])
+            cart.all().delete()
+            order.save()
+            return Response(status=status.HTTP_201_CREATED)
+

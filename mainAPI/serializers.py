@@ -1,8 +1,10 @@
+from datetime import datetime
+
 from django.contrib.auth.models import Group, User
 
 from rest_framework import serializers
 
-from mainAPI.models import MenuItem, Cart, Order, Category
+from mainAPI.models import MenuItem, Cart, Order, Category, OrderItem
 
 
 class MenuItemsSerializer(serializers.ModelSerializer):
@@ -25,10 +27,33 @@ class CartSerializer(serializers.ModelSerializer):
         return obj.quantity * obj.unit_price
 
 class OrderSerializer(serializers.ModelSerializer):
+    total = serializers.SerializerMethodField(method_name="get_total", default=0)
+    date = serializers.DateField(format="%Y-%m-%d", default=str(datetime.today().date()))
     class Meta:
         model = Order
-        fields = ["status", "total"]
+        fields = ["total", "date", "status", "delivery_crew"]
+    def get_total(self, order):
+        if order.exists():
+            queryset = OrderItem.objects.filter(order=order.get())
+            total = 0
+            serializer_order_items = OrderItemSerializer(queryset, many=True)
+            for order_item in serializer_order_items.data:
+                total += order_item['price']
+            return total
+        else:
+            return 0
 
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    order = serializers.StringRelatedField(read_only=True)
+    price = serializers.SerializerMethodField(method_name="total_price")
+    class Meta:
+        model = OrderItem
+        fields = "__all__"
+
+    def total_price(self, obj):
+        return obj.quantity * obj.unit_price
 
 class GroupSerializer(serializers.ModelSerializer):
     class Meta:
