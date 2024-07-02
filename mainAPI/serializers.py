@@ -47,8 +47,13 @@ class OrderSerializer(serializers.ModelSerializer):
             return 0
 
 
+from rest_framework import serializers
+from mainAPI.models import OrderItem, MenuItem
+
 class OrderItemSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField(method_name="total_price")
+    menuItem = serializers.PrimaryKeyRelatedField(queryset=MenuItem.objects.all())
+    unit_price = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
 
     class Meta:
         model = OrderItem
@@ -56,6 +61,20 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     def total_price(self, obj):
         return obj.quantity * obj.unit_price
+
+    def create(self, validated_data):
+        menuItem = validated_data.get('menuItem')
+        validated_data['unit_price'] = menuItem.price
+        validated_data['price'] = validated_data['quantity'] * menuItem.price
+        return OrderItem.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        instance.quantity = validated_data.get('quantity', instance.quantity)
+        instance.menuItem = validated_data.get('menuItem', instance.menuItem)
+        instance.unit_price = instance.menuItem.price
+        instance.price = self.total_price(instance)
+        instance.save()
+        return instance
 
 
 class GroupSerializer(serializers.ModelSerializer):

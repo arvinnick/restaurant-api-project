@@ -1,6 +1,5 @@
 from datetime import datetime
 
-
 from django.contrib.auth.models import Group, User
 from django.db import IntegrityError
 from django.http import Http404
@@ -9,6 +8,7 @@ from django.views.generic import RedirectView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.exceptions import ValidationError
@@ -84,8 +84,8 @@ def user_groups(request, group):
                                 is_active=True,
                                 password=request.data.get('password'),
                                 email=request.data.get('email'))
-            # user_set.save()
-            # serialized_users = UserSerializer(user_set, many=True)
+                # user_set.save()
+                # serialized_users = UserSerializer(user_set, many=True)
                 return Response(status=status.HTTP_201_CREATED)
             except IntegrityError as e:
                 if User.objects.filter(username=request.data.get('username')).exists():
@@ -187,12 +187,14 @@ def cart_menu_item(request):
     else:
         return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
+
 class OrderView(ListCreateAPIView):
     queryset = Order.objects.all()
     serializer_class = OrderSerializer
 
     def get_permissions(self):
         return [IsAuthenticated()]
+
     def get(self, request, **kwargs):
         if "customer" in list(self.request.user.groups.values_list("name", flat=True)):
             data = self.queryset.filter(user=self.request.user)
@@ -208,7 +210,6 @@ class OrderView(ListCreateAPIView):
             return Response(serialized_data.data, status=status.HTTP_200_OK)
         else:
             return Response("no order", status=status.HTTP_404_NOT_FOUND)
-
 
     def post(self, request, *args, **kwargs):
         user = User.objects.get(id=request.user.id)
@@ -228,43 +229,85 @@ class OrderView(ListCreateAPIView):
             return Response(status=status.HTTP_201_CREATED)
 
 
-
 @api_view(["GET", "DELETE", "PATCH", "PUT"])
 @permission_classes([IsAuthenticated])
 def single_order_view(request, pk):
     user = request.user
-    user_group = User.objects.get(id=user.id).groups.get()
-    order = Order.objects.filter(id=pk)
-    if not order.exists():
+    user_group = user.groups.first()
+    try:
+        order = Order.objects.get(id=pk)
+    except Order.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+
     if request.method == "GET":
         if user_group.name == "customer":
-            order = order.get()
             if order.user == user:
-                items = OrderItem.objects.filter(order=order).all()
+                items = OrderItem.objects.filter(order=order)
                 serialized_items = OrderItemSerializer(items, many=True)
                 return Response(serialized_items.data, status=status.HTTP_200_OK)
             else:
                 return Response(status=status.HTTP_401_UNAUTHORIZED)
         else:
-            return Response("user should be costumer", status=status.HTTP_403_FORBIDDEN)
+            return Response("User should be a customer", status=status.HTTP_403_FORBIDDEN)
+
     elif request.method == "DELETE":
         if user_group.name == "manager":
             order.delete()
             return Response(status=status.HTTP_202_ACCEPTED)
-    elif request.method == "PUT":
-        if user_group.name == "costumer":
-            data = OrderItemSerializer(request.data)
-            OrderItem.objects.create(order=order, quantity=data['quantity'],
-                                     menuItem=MenuItem.objects.get(title=data['menuitem']),
-                                     unit_price=data['unit_price'], price=data['price'])
-            return Response(status=status.HTTP_201_CREATED)
         else:
-            return Response("user not authorized", status=status.HTTP_401_UNAUTHORIZED)
+            return Response("User not authorized", status=status.HTTP_401_UNAUTHORIZED)
+
+    elif request.method == "PUT":
+        if user_group.name == "customer":
+            data = request.data
+            menu_item = MenuItem.objects.get(title=data['menuItem'])
+            order_item = OrderItem.objects.create(order=order, quantity=data['quantity'],
+                                                  menuItem=menu_item,
+                                                  unit_price=menu_item.price,
+                                                  price=menu_item.price * data['quantity'])
+            return Response(OrderItemSerializer(order_item).data, status=status.HTTP_201_CREATED)
+        else:
+            return Response("User not authorized", status=status.HTTP_401_UNAUTHORIZED)
 
     elif request.method == "PATCH":
-        if user_group.name == "costumer":
-            data = OrderItemSerializer(request.data)
-            order.update(data=data.data.items())
-    else:
-        return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        data = JSONParser().parse(request)
+        if user_group.name == 'customer':
+            if set(data.keys()) != {"menuItem", "quantity"}:
+                return Response("Only menuItem and quantity should be added", status=status.HTTP_400_BAD_REQUEST)
+            else:
+                menu_item = MenuItem.objects.get(title=data['menuItem'])
+                order_item = OrderItem.objects.filter(menuItem=menu_item, order=order).first()
+                if order_item:
+                    order_item.quantity += data['quantity']
+                    order_item.price = order_item.unit_price * order_item.quantity
+                    order_item.save()
+                    return Response(OrderItemSerializer(order_item).data, status=status.HTTP_200_OK)
+                else:
+                    data["menuItem"] = menu_item.id
+                    serializer = OrderItemSerializer(data=data)
+                    if serializer.is_valid():
+                        serializer.save(order=order)
+                        return Response(serializer.data, status=status.HTTP_200_OK)
+                    else:
+                        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        elif user_group.name == "manager":
+            order_status = data.get("status")
+            if order_status:
+                order.status = order_status
+            order_delivery_assignee = data.get("delivery_crew")
+            if order_delivery_assignee:
+                order.delivery_crew = order_delivery_assignee
+            order.save()
+            return Response(status=status.HTTP_200_OK)
+
+        elif user_group.name == "delivery_crew":
+            order_status = data.get("status")
+            if order_status:
+                order.status = order_status
+            order.save()
+            return Response(status=status.HTTP_200_OK)
+
+    return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
