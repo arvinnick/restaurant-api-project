@@ -162,7 +162,7 @@ def cart_menu_item(request):
         return Response(serialized_cart.data, status=status.HTTP_200_OK)
     elif request.method == "POST":
         menu_item = MenuItem.objects.filter(title=request.data.get('title')).get()
-        quantity = eval(request.data.get('quantity'))
+        quantity = int(request.data.get('quantity'))
         try:
             cart_item = Cart()
             cart_item.user = request.user
